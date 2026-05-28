@@ -2,6 +2,9 @@
 #include <iostream>
 #include <stdexcept>
 #include <cmath>
+#include <cctype>
+#include <climits>
+#include <cfloat>
 
 Evaluator::Evaluator() {
     auto initialEnv = std::make_unique<Environment>();
@@ -63,6 +66,9 @@ void Evaluator::visit(VarDeclStatement* node) {
                 else throw std::runtime_error("Invalid BOOL value. Expected \"TRUE\" or \"FALSE\".");
             }
             else throw std::runtime_error("Type mismatch on initialization.");
+            val.initialized = true;
+        } else {
+            val.initialized = false;
         }
         
         env->declareVariable(decl.name, val);
@@ -122,8 +128,12 @@ void Evaluator::visit(ScanStatement* node) {
         }
         const auto& target = node->targets[i];
         RuntimeValue v = env->getVariable(target);
-        std::string s;
-        std::cin >> s;
+        
+        std::string s = "";
+        std::cin >> std::ws;
+        while (std::cin.peek() != EOF && !isspace(std::cin.peek()) && std::cin.peek() != ',') {
+            s += (char)std::cin.get();
+        }
 
         if (v.type == DataType::INT) {
             if (s.find('.') != std::string::npos) {
@@ -138,6 +148,9 @@ void Evaluator::visit(ScanStatement* node) {
                 throw std::runtime_error("Invalid INT input for '" + target + "'.");
             }
         } else if (v.type == DataType::FLOAT) {
+            // if (s.find('.') == std::string::npos) {
+            //     throw std::runtime_error("Type mismatch: Expected FLOAT, got INT input for '" + target + "'.");
+            // }
             try {
                 size_t pos;
                 float x = std::stof(s, &pos);
@@ -155,6 +168,23 @@ void Evaluator::visit(ScanStatement* node) {
             else throw std::runtime_error("Invalid BOOL input for '" + target + "'. Expected TRUE or FALSE.");
         }
         env->assignVariable(target, v);
+    }
+
+    // Check for trailing comma or extra inputs on the same line
+    int next = std::cin.peek();
+    while (next != EOF && (next == ' ' || next == '\t')) {
+        std::cin.get();
+        next = std::cin.peek();
+    }
+    
+    if (next != EOF && next != '\n' && next != '\r') {
+        // If it's a comma or more data, it's too many inputs
+        // Consume the rest of the line to stay in sync
+        while (next != EOF && next != '\n' && next != '\r') {
+            std::cin.get();
+            next = std::cin.peek();
+        }
+        throw std::runtime_error("Too many inputs for SCAN");
     }
 }
 
@@ -228,9 +258,20 @@ void Evaluator::visit(BinaryExpr* node) {
     
     auto t = node->op.type;
     
-    // Logical
+    // Logical — convert STRING "TRUE"/"FALSE" to BOOL for AND/OR
     if (t == TokenType::AND || t == TokenType::OR) {
-        if (left.type != DataType::BOOL || right.type != DataType::BOOL) throw std::runtime_error("Logical ops require BOOL.");
+        // Auto-convert string "TRUE"/"FALSE" to BOOL for logical ops
+        if (left.type == DataType::STRING) {
+            std::string s = std::get<std::string>(left.value);
+            if (s == "TRUE") left = RuntimeValue(true);
+            else if (s == "FALSE") left = RuntimeValue(false);
+        }
+        if (right.type == DataType::STRING) {
+            std::string s = std::get<std::string>(right.value);
+            if (s == "TRUE") right = RuntimeValue(true);
+            else if (s == "FALSE") right = RuntimeValue(false);
+        }
+        if (left.type != DataType::BOOL || right.type != DataType::BOOL) throw std::runtime_error("Logical operators AND/OR require BOOL.");
         bool l = std::get<bool>(left.value);
         bool r = std::get<bool>(right.value);
         if (t == TokenType::AND) currentResult = RuntimeValue(l && r);
@@ -238,68 +279,127 @@ void Evaluator::visit(BinaryExpr* node) {
         return;
     }
     
-    // Equality
+    // Equality — strict type matching
     if (t == TokenType::EQUAL_EQUAL || t == TokenType::NOT_EQUAL) {
+        if (left.type != right.type) {
+            throw std::runtime_error("Cannot compare values of different types.");
+        }
         bool eq = false;
         if (left.type == DataType::INT && right.type == DataType::INT) eq = (std::get<int>(left.value) == std::get<int>(right.value));
         else if (left.type == DataType::FLOAT && right.type == DataType::FLOAT) eq = (std::get<float>(left.value) == std::get<float>(right.value));
         else if (left.type == DataType::CHAR && right.type == DataType::CHAR) eq = (std::get<char>(left.value) == std::get<char>(right.value));
         else if (left.type == DataType::BOOL && right.type == DataType::BOOL) eq = (std::get<bool>(left.value) == std::get<bool>(right.value));
-        else {
-            // Mixed INT/FLOAT fallback
-            if (left.type == DataType::INT && right.type == DataType::FLOAT) eq = (std::get<int>(left.value) == std::get<float>(right.value));
-            else if (left.type == DataType::FLOAT && right.type == DataType::INT) eq = (std::get<float>(left.value) == std::get<int>(right.value));
-        }
         
         if (t == TokenType::NOT_EQUAL) eq = !eq;
         currentResult = RuntimeValue(eq);
         return;
     }
     
-    // Comparison
+    // Comparison — strict type matching
     if (t == TokenType::GREATER || t == TokenType::LESS || t == TokenType::GREATER_EQUAL || t == TokenType::LESS_EQUAL) {
-        float l = 0, r = 0;
-        if (left.type == DataType::INT) l = std::get<int>(left.value); else l = std::get<float>(left.value);
-        if (right.type == DataType::INT) r = std::get<int>(right.value); else r = std::get<float>(right.value);
+        if (left.type != right.type) {
+            throw std::runtime_error("Cannot compare values of different types.");
+        }
+        if (left.type == DataType::BOOL) throw std::runtime_error("Cannot do Boolean Arithmetic");
+        if (left.type == DataType::CHAR) throw std::runtime_error("Cannot do Character Arithmetic");
         
         bool res = false;
-        if (t == TokenType::GREATER) res = l > r;
-        if (t == TokenType::LESS) res = l < r;
-        if (t == TokenType::GREATER_EQUAL) res = l >= r;
-        if (t == TokenType::LESS_EQUAL) res = l <= r;
+        if (left.type == DataType::INT) {
+            int l = std::get<int>(left.value);
+            int r = std::get<int>(right.value);
+            if (t == TokenType::GREATER) res = l > r;
+            if (t == TokenType::LESS) res = l < r;
+            if (t == TokenType::GREATER_EQUAL) res = l >= r;
+            if (t == TokenType::LESS_EQUAL) res = l <= r;
+        } else if (left.type == DataType::FLOAT) {
+            float l = std::get<float>(left.value);
+            float r = std::get<float>(right.value);
+            if (t == TokenType::GREATER) res = l > r;
+            if (t == TokenType::LESS) res = l < r;
+            if (t == TokenType::GREATER_EQUAL) res = l >= r;
+            if (t == TokenType::LESS_EQUAL) res = l <= r;
+        }
         currentResult = RuntimeValue(res);
         return;
     }
     
     // Arithmetic
     if (t == TokenType::PLUS || t == TokenType::MINUS || t == TokenType::STAR || t == TokenType::SLASH || t == TokenType::MODULO) {
-        if (left.type == DataType::FLOAT || right.type == DataType::FLOAT) {
-            float l = (left.type == DataType::INT) ? std::get<int>(left.value) : std::get<float>(left.value);
-            float r = (right.type == DataType::INT) ? std::get<int>(right.value) : std::get<float>(right.value);
+        // Check for BOOL/CHAR operands first
+        if (left.type == DataType::BOOL || right.type == DataType::BOOL) {
+            throw std::runtime_error("Cannot do Boolean Arithmetic");
+        }
+        if (left.type == DataType::CHAR || right.type == DataType::CHAR) {
+            throw std::runtime_error("Cannot do Character Arithmetic");
+        }
+        
+        // Strict type checking: no mixed INT/FLOAT arithmetic
+        if (left.type != right.type) {
+            throw std::runtime_error("Cannot perform arithmetic between INT and FLOAT.");
+        }
+        
+        if (left.type == DataType::FLOAT) {
+            float l = std::get<float>(left.value);
+            float r = std::get<float>(right.value);
+            
+            // Division by zero check
+            if ((t == TokenType::SLASH || t == TokenType::MODULO) && r == 0.0f) {
+                throw std::runtime_error("Cannot divide by zero.");
+            }
+            
             float res = 0;
             switch(t) {
                 case TokenType::PLUS: res = l + r; break;
                 case TokenType::MINUS: res = l - r; break;
                 case TokenType::STAR: res = l * r; break;
                 case TokenType::SLASH: res = l / r; break;
-                case TokenType::MODULO: res = std::fmod(l, r); break;
+                case TokenType::MODULO: {
+                    res = std::fmod(l, r);
+                    if (res < 0) res += std::fabs(r);
+                    break;
+                }
                 default: break;
             }
+            
+            // Float overflow check
+            if (std::isinf(res) || res > FLT_MAX || res < -FLT_MAX) {
+                throw std::runtime_error("Float overflow.");
+            }
+            
             currentResult = RuntimeValue(res);
             return;
         } else {
             int l = std::get<int>(left.value);
             int r = std::get<int>(right.value);
-            int res = 0;
+            
+            // Division by zero check
+            if ((t == TokenType::SLASH || t == TokenType::MODULO) && r == 0) {
+                throw std::runtime_error("Cannot divide by zero.");
+            }
+            
+            // Use long long for overflow detection
+            long long ll = l;
+            long long lr = r;
+            long long lres = 0;
             switch(t) {
-                case TokenType::PLUS: res = l + r; break;
-                case TokenType::MINUS: res = l - r; break;
-                case TokenType::STAR: res = l * r; break;
-                case TokenType::SLASH: res = l / r; break;
-                case TokenType::MODULO: res = l % r; break;
+                case TokenType::PLUS: lres = ll + lr; break;
+                case TokenType::MINUS: lres = ll - lr; break;
+                case TokenType::STAR: lres = ll * lr; break;
+                case TokenType::SLASH: lres = ll / lr; break;
+                case TokenType::MODULO: {
+                    lres = ll % lr;
+                    if (lres < 0) lres += std::abs(r);
+                    break;
+                }
                 default: break;
             }
-            currentResult = RuntimeValue(res);
+            
+            // Integer overflow check
+            if (lres > INT_MAX || lres < INT_MIN) {
+                throw std::runtime_error("Integer overflow.");
+            }
+            
+            currentResult = RuntimeValue(static_cast<int>(lres));
             return;
         }
     }
@@ -308,6 +408,13 @@ void Evaluator::visit(BinaryExpr* node) {
 void Evaluator::visit(UnaryExpr* node) {
     RuntimeValue right = evaluateExpr(node->right.get());
     if (node->op.type == TokenType::NOT) {
+        // Auto-convert string "TRUE"/"FALSE" to BOOL for NOT
+        if (right.type == DataType::STRING) {
+            std::string s = std::get<std::string>(right.value);
+            if (s == "TRUE") right = RuntimeValue(true);
+            else if (s == "FALSE") right = RuntimeValue(false);
+            else throw std::runtime_error("NOT requires BOOL.");
+        }
         if (right.type != DataType::BOOL) throw std::runtime_error("NOT requires BOOL.");
         currentResult = RuntimeValue(!std::get<bool>(right.value));
     } else if (node->op.type == TokenType::MINUS) {
@@ -336,5 +443,9 @@ void Evaluator::visit(LiteralExpr* node) {
 }
 
 void Evaluator::visit(IdentifierExpr* node) {
-    currentResult = env->getVariable(node->name);
+    RuntimeValue val = env->getVariable(node->name);
+    if (!val.initialized) {
+        throw std::runtime_error("Cannot use uninitialized variable: " + node->name + ".");
+    }
+    currentResult = val;
 }

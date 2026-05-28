@@ -17,6 +17,7 @@ void Environment::assignVariable(const std::string& name, RuntimeValue value) {
         if (variables[name].type != value.type) {
             throw std::runtime_error("Type mismatch assignment for variable: " + name);
         }
+        value.initialized = true;
         variables[name] = value;
         return;
     }

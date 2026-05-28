@@ -224,6 +224,17 @@ std::unique_ptr<Statement> Parser::statement() {
         throw std::runtime_error("Expected WHEN after REPEAT.");
     }
     
+    // Checks Missing END IF/END FOR/END REPEAT before trying to parse an assignment or expression statement
+    if (check(TokenType::ELSE)) {
+        throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Unexpected ELSE keyword.");
+    }
+    if (check(TokenType::START)) {
+        throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Unexpected START keyword.");
+    }
+    if (check(TokenType::END)) {
+        throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Unexpected END keyword.");
+    }
+    
     return assignStmt();
 }
 
@@ -265,13 +276,20 @@ std::unique_ptr<Statement> Parser::ifStmt() {
     consume(TokenType::LPAREN, "Expected '(' after IF.");
     auto condition = expression();
     consume(TokenType::RPAREN, "Expected ')' after IF condition.");
+    if (!isLineAtEnd()) {
+        throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Unexpected tokens after IF condition. No code allowed on the same line.");
+    }
 
     advanceLine(); // move to START IF line
-    if (!check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::IF) {
-        throw std::runtime_error("Expected START IF");
+    int errLineIf = isAtEnd() ? lines[currentLine - 1][0].line : peek().line;
+    if (isAtEnd() || !check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::IF) {
+        throw std::runtime_error("Line " + std::to_string(errLineIf) + " Parser Error: Missing: START IF");
+    }
+    if (lines[currentLine].size() != 2) {
+        throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: 'START IF' must appear alone on this line.");
     }
     
-    auto thenBranch = block(); // Block will leave currentLine on END IF
+    auto thenBranch = block(TokenType::IF, "IF"); // Block will leave currentLine on END IF
 
     auto stmt = std::make_unique<IfStatement>(std::move(condition), std::move(thenBranch));
 
@@ -293,20 +311,34 @@ std::unique_ptr<Statement> Parser::ifStmt() {
                 consume(TokenType::LPAREN, "Expected '(' after ELSE IF.");
                 auto elifCondition = expression();
                 consume(TokenType::RPAREN, "Expected ')' after condition.");
-                advanceLine();
-                if (!check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::IF) {
-                    throw std::runtime_error("Expected START IF for ELSE IF");
+                if (!isLineAtEnd()) {
+                    throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Unexpected tokens after ELSE IF condition. No code allowed on the same line.");
                 }
-                auto elifBody = block();
+                advanceLine();
+                int errLineElif = isAtEnd() ? lines[currentLine - 1][0].line : peek().line;
+                if (isAtEnd() || !check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::IF) {
+                    throw std::runtime_error("Line " + std::to_string(errLineElif) + " Parser Error: Missing: START IF");
+                }
+                if (lines[currentLine].size() != 2) {
+                    throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: 'START IF' must appear alone on this line.");
+                }
+                auto elifBody = block(TokenType::IF, "IF");
                 IfStatement::ElseIfBranch elifBranch{std::move(elifCondition), std::move(elifBody)};
                 stmt->elseIfBranches.push_back(std::move(elifBranch));
             } else {
                 // ELSE
-                advanceLine();
-                if (!check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::IF) {
-                    throw std::runtime_error("Expected START IF for ELSE");
+                if (!isLineAtEnd()) {
+                    throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Unexpected tokens after ELSE. No code allowed on the same line.");
                 }
-                stmt->elseBranch = block();
+                advanceLine();
+                int errLineElse = isAtEnd() ? lines[currentLine - 1][0].line : peek().line;
+                if (isAtEnd() || !check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::IF) {
+                    throw std::runtime_error("Line " + std::to_string(errLineElse) + " Parser Error: Missing: START IF");
+                }
+                if (lines[currentLine].size() != 2) {
+                    throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: 'START IF' must appear alone on this line.");
+                }
+                stmt->elseBranch = block(TokenType::IF, "IF");
                 break; // Only 1 ELSE allowed
             }
         } else {
@@ -329,10 +361,17 @@ std::unique_ptr<Statement> Parser::forStmt() {
     consume(TokenType::ASSIGN, "Expected '='.");
     auto updateVal = expression();
     consume(TokenType::RPAREN, "Expected ')'.");
+    if (!isLineAtEnd()) {
+        throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Unexpected tokens after FOR loop parameters. No code allowed on the same line.");
+    }
     
     advanceLine();
-    if (!check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::FOR) {
-        throw std::runtime_error("Expected START FOR");
+    int errLineFor = isAtEnd() ? lines[currentLine - 1][0].line : peek().line;
+    if (isAtEnd() || !check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::FOR) {
+        throw std::runtime_error("Line " + std::to_string(errLineFor) + " Parser Error: Missing: START FOR");
+    }
+    if (lines[currentLine].size() != 2) {
+        throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: 'START FOR' must appear alone on this line.");
     }
     
     auto stmt = std::make_unique<ForStatement>();
@@ -341,7 +380,7 @@ std::unique_ptr<Statement> Parser::forStmt() {
     stmt->condition = std::move(cond);
     stmt->updateTarget = updateTarget;
     stmt->updateValue = std::move(updateVal);
-    stmt->body = block(); // Block parses until END FOR (but wait, block specifically looks for "END X", so let's make block generic)
+    stmt->body = block(TokenType::FOR, "FOR");
 
     return stmt;
 }
@@ -350,24 +389,37 @@ std::unique_ptr<Statement> Parser::repeatStmt() {
     consume(TokenType::LPAREN, "Expected '(' for WHEN condition.");
     auto cond = expression();
     consume(TokenType::RPAREN, "Expected ')'.");
-    
-    advanceLine();
-    if (!check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::REPEAT) {
-        throw std::runtime_error("Expected START REPEAT");
+    if (!isLineAtEnd()) {
+        throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Unexpected tokens after REPEAT condition. No code allowed on the same line.");
     }
     
-    auto body = block();
+    advanceLine();
+    int errLineRep = isAtEnd() ? lines[currentLine - 1][0].line : peek().line;
+    if (isAtEnd() || !check(TokenType::START) || currentToken + 1 >= lines[currentLine].size() || lines[currentLine][currentToken + 1].type != TokenType::REPEAT) {
+        throw std::runtime_error("Line " + std::to_string(errLineRep) + " Parser Error: Missing: START REPEAT");
+    }
+    if (lines[currentLine].size() != 2) {
+        throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: 'START REPEAT' must appear alone on this line.");
+    }
+    
+    auto body = block(TokenType::REPEAT, "REPEAT");
     return std::make_unique<RepeatStatement>(std::move(cond), std::move(body));
 }
 
-std::vector<std::unique_ptr<Statement>> Parser::block() {
+std::vector<std::unique_ptr<Statement>> Parser::block(TokenType expectedEndType, const std::string& blockName) {
     std::vector<std::unique_ptr<Statement>> statements;
     advanceLine(); // move past START block keyword line
     
     while (!isAtEnd()) {
         if (check(TokenType::END)) {
-            // Found END block
-            break;
+            if (currentToken + 1 < lines[currentLine].size() && lines[currentLine][currentToken + 1].type == expectedEndType) {
+                if (lines[currentLine].size() != 2) {
+                    throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: 'END " + blockName + "' must appear alone on this line.");
+                }
+                break;
+            } else {
+                throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Missing: END " + blockName);
+            }
         }
 
         if (check(TokenType::DECLARE)) {
@@ -379,6 +431,10 @@ std::vector<std::unique_ptr<Statement>> Parser::block() {
 
         statements.push_back(declaration());
         advanceLine();
+    }
+    
+    if (isAtEnd()) {
+        throw std::runtime_error("Parser Error: Missing: END " + blockName);
     }
     
     // consume END X line (where X is IF, FOR, REPEAT)

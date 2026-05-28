@@ -39,14 +39,14 @@ private:
     std::unique_ptr<Expr> primary();
     
     std::unique_ptr<Statement> varDecl();
-    std::unique_ptr<Statement> assignStmt(); // handles target = expr or x = y = 4
+    std::unique_ptr<Statement> assignStmt();
     std::unique_ptr<Statement> printStmt();
     std::unique_ptr<Statement> scanStmt();
     std::unique_ptr<Statement> ifStmt();
     std::unique_ptr<Statement> forStmt();
     std::unique_ptr<Statement> repeatStmt();
 
-    std::vector<std::unique_ptr<Statement>> block();
+    std::vector<std::unique_ptr<Statement>> block(TokenType expectedEndType, const std::string& blockName);
 
 public:
     Parser(bool isRepl = false);
