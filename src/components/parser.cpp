@@ -259,6 +259,9 @@ std::unique_ptr<Statement> Parser::printStmt() {
     do {
         stmt->expressions.push_back(expression());
     } while (match(TokenType::AMPERSAND));
+    if (!isLineAtEnd()) {
+        throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: PRINT arguments must be separated by '&'.");
+    }
     return stmt;
 }
 

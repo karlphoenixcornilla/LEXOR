@@ -104,19 +104,27 @@ std::vector<std::vector<Token>> Lexer::lex(const std::string& source) {
             } else if (c == '"') { 
                 advance(); // skip "
                 std::string str = "";
-                while (!isAtEnd() && peek() != '"') {
+                while (!isAtEnd() && peek() != '"' && peek() != '\n' && peek() != '\r') {
                     str += advance();
                 }
-                if (!isAtEnd()) advance(); // skip "
-                currentLineTokens.push_back({TokenType::STRING_LITERAL, str, line});
+                if (isAtEnd() || peek() != '"') {
+                    currentLineTokens.push_back({TokenType::ERROR, "Unterminated string literal.", line});
+                } else {
+                    advance(); // skip closing "
+                    currentLineTokens.push_back({TokenType::STRING_LITERAL, str, line});
+                }
             } else if (c == '\'') {
                 advance(); // skip '
                 std::string ch = "";
-                if (!isAtEnd() && peek() != '\'') {
+                if (!isAtEnd() && peek() != '\'' && peek() != '\n' && peek() != '\r') {
                     ch += advance();
                 }
-                if (!isAtEnd()) advance(); // skip '
-                currentLineTokens.push_back({TokenType::CHAR_LITERAL, ch, line});
+                if (isAtEnd() || peek() != '\'') {
+                    currentLineTokens.push_back({TokenType::ERROR, "Unterminated char literal.", line});
+                } else {
+                    advance(); // skip closing '
+                    currentLineTokens.push_back({TokenType::CHAR_LITERAL, ch, line});
+                }
             } else if (c == '[') {
                 advance(); // skip [
                 std::string ch = "";
