@@ -19,7 +19,9 @@ std::unordered_map<std::string, TokenType> keywords = {
     {"WHEN", TokenType::WHEN},
     {"AND", TokenType::AND},
     {"OR", TokenType::OR},
-    {"NOT", TokenType::NOT}
+    {"NOT", TokenType::NOT},
+    {"DO", TokenType::DO},
+    {"WHILE", TokenType::WHILE}
 };
 
 TokenType checkKeyword(const std::string& str) {
@@ -50,6 +52,8 @@ std::string tokenTypeToString(TokenType type) {
         case TokenType::AND: return "AND";
         case TokenType::OR: return "OR";
         case TokenType::NOT: return "NOT";
+        case TokenType::DO: return "DO";
+        case TokenType::WHILE: return "WHILE";
         case TokenType::IDENTIFIER: return "IDENTIFIER";
         case TokenType::INT_LITERAL: return "INT_LITERAL";
         case TokenType::FLOAT_LITERAL: return "FLOAT_LITERAL";

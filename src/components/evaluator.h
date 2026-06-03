@@ -32,6 +32,7 @@ public:
     void visit(IfStatement* node) override;
     void visit(ForStatement* node) override;
     void visit(RepeatStatement* node) override;
+    void visit(DoWhileStatement* node) override;
     void visit(BinaryExpr* node) override;
     void visit(UnaryExpr* node) override;
     void visit(LiteralExpr* node) override;

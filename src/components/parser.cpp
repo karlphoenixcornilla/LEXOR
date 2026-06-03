@@ -229,6 +229,10 @@ std::unique_ptr<Statement> Parser::statement() {
         throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Unexpected ELSE keyword.");
     }
     if (check(TokenType::START)) {
+        // Check if this is a START DO (do-while loop)
+        if (currentToken + 1 < lines[currentLine].size() && lines[currentLine][currentToken + 1].type == TokenType::DO) {
+            return doWhileStmt();
+        }
         throw std::runtime_error("Line " + std::to_string(peek().line) + " Parser Error: Unexpected START keyword.");
     }
     if (check(TokenType::END)) {
@@ -407,6 +411,36 @@ std::unique_ptr<Statement> Parser::repeatStmt() {
     
     auto body = block(TokenType::REPEAT, "REPEAT");
     return std::make_unique<RepeatStatement>(std::move(cond), std::move(body));
+}
+
+std::unique_ptr<Statement> Parser::doWhileStmt() {
+    // Currently on the START DO line
+    int startLine = peek().line;
+    if (lines[currentLine].size() != 2) {
+        throw std::runtime_error("Line " + std::to_string(startLine) + " Parser Error: 'START DO' must appear alone on this line.");
+    }
+
+    auto body = block(TokenType::DO, "DO");
+
+    // After block(), currentLine is on the END DO line.
+    // Advance to the DO WHILE(...) line.
+    advanceLine();
+    if (isAtEnd()) {
+        throw std::runtime_error("Parser Error: Missing: DO WHILE after END DO");
+    }
+
+    int doWhileLine = peek().line;
+    consume(TokenType::DO, "Expected 'DO' after END DO.");
+    consume(TokenType::WHILE, "Expected 'WHILE' after 'DO'.");
+    consume(TokenType::LPAREN, "Expected '(' after DO WHILE.");
+    auto cond = expression();
+    consume(TokenType::RPAREN, "Expected ')' after DO WHILE condition.");
+
+    if (!isLineAtEnd()) {
+        throw std::runtime_error("Line " + std::to_string(doWhileLine) + " Parser Error: Unexpected tokens after DO WHILE condition. No code allowed on the same line.");
+    }
+
+    return std::make_unique<DoWhileStatement>(std::move(cond), std::move(body));
 }
 
 std::vector<std::unique_ptr<Statement>> Parser::block(TokenType expectedEndType, const std::string& blockName) {

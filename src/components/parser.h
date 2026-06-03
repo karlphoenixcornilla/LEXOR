@@ -45,6 +45,7 @@ private:
     std::unique_ptr<Statement> ifStmt();
     std::unique_ptr<Statement> forStmt();
     std::unique_ptr<Statement> repeatStmt();
+    std::unique_ptr<Statement> doWhileStmt();
 
     std::vector<std::unique_ptr<Statement>> block(TokenType expectedEndType, const std::string& blockName);
 

@@ -14,6 +14,7 @@ class ScanStatement;
 class IfStatement;
 class ForStatement;
 class RepeatStatement;
+class DoWhileStatement;
 class BinaryExpr;
 class UnaryExpr;
 class LiteralExpr;
@@ -30,6 +31,7 @@ public:
     virtual void visit(IfStatement* node) = 0;
     virtual void visit(ForStatement* node) = 0;
     virtual void visit(RepeatStatement* node) = 0;
+    virtual void visit(DoWhileStatement* node) = 0;
     virtual void visit(BinaryExpr* node) = 0;
     virtual void visit(UnaryExpr* node) = 0;
     virtual void visit(LiteralExpr* node) = 0;
@@ -164,6 +166,16 @@ public:
     std::vector<std::unique_ptr<Statement>> body;
 
     RepeatStatement(std::unique_ptr<Expr> cond, std::vector<std::unique_ptr<Statement>> b)
+        : condition(std::move(cond)), body(std::move(b)) {}
+    void accept(ASTVisitor* visitor) override { visitor->visit(this); }
+};
+
+class DoWhileStatement : public Statement {
+public:
+    std::unique_ptr<Expr> condition;
+    std::vector<std::unique_ptr<Statement>> body;
+
+    DoWhileStatement(std::unique_ptr<Expr> cond, std::vector<std::unique_ptr<Statement>> b)
         : condition(std::move(cond)), body(std::move(b)) {}
     void accept(ASTVisitor* visitor) override { visitor->visit(this); }
 };

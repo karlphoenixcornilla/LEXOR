@@ -10,7 +10,7 @@ enum class TokenType {
     SCRIPT, AREA, START, END, DECLARE,
     INT_TYPE, FLOAT_TYPE, CHAR_TYPE, BOOL_TYPE,
     PRINT, SCAN,
-    IF, ELSE, FOR, REPEAT, WHEN,
+    IF, ELSE, FOR, REPEAT, WHEN, DO, WHILE,
     AND, OR, NOT,
 
     // Values / Identifiers

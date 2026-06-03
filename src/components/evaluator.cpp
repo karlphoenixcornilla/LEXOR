@@ -252,6 +252,18 @@ void Evaluator::visit(RepeatStatement* node) {
     }
 }
 
+void Evaluator::visit(DoWhileStatement* node) {
+    do {
+        pushEnv();
+        for (auto& stmt : node->body) stmt->accept(this);
+        popEnv();
+
+        RuntimeValue condVal = evaluateExpr(node->condition.get());
+        if (condVal.type != DataType::BOOL) throw std::runtime_error("DO WHILE condition must be BOOL.");
+        if (!std::get<bool>(condVal.value)) break;
+    } while (true);
+}
+
 void Evaluator::visit(BinaryExpr* node) {
     RuntimeValue left = evaluateExpr(node->left.get());
     RuntimeValue right = evaluateExpr(node->right.get());
